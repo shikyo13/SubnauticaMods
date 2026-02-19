@@ -1,0 +1,21 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BeaconColorPicker", "BeaconColorPicker.csproj", "{ABE42674-E09A-45C2-86C1-81FE4B969862}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{ABE42674-E09A-45C2-86C1-81FE4B969862}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ABE42674-E09A-45C2-86C1-81FE4B969862}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ABE42674-E09A-45C2-86C1-81FE4B969862}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ABE42674-E09A-45C2-86C1-81FE4B969862}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
