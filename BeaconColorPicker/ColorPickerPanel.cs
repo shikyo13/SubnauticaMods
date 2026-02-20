@@ -27,7 +27,6 @@ namespace BeaconColorPicker
                     var go = new GameObject("BeaconColorPickerPanel");
                     DontDestroyOnLoad(go);
                     _instance = go.AddComponent<ColorPickerPanel>();
-                    _instance.BuildUI();
                 }
                 return _instance;
             }
@@ -37,6 +36,10 @@ namespace BeaconColorPicker
 
         public void Show(string pingId, Color currentColor, Action<string, Color> onApply)
         {
+            // Rebuild UI if panel was destroyed (e.g. scene change destroyed PDA canvas)
+            if (_panelRoot == null)
+                BuildUI();
+
             _currentPingId = pingId;
             _onApply = onApply;
 
@@ -47,6 +50,7 @@ namespace BeaconColorPicker
             UpdatePreview();
 
             _panelRoot.SetActive(true);
+            _panelRoot.transform.SetAsLastSibling();
         }
 
         public void Hide()
@@ -85,20 +89,24 @@ namespace BeaconColorPicker
 
         private void BuildUI()
         {
-            // Root canvas — ScreenSpaceOverlay, on top of PDA
-            var canvasGo = new GameObject("ColorPickerCanvas");
-            canvasGo.transform.SetParent(transform, false);
-            var canvas = canvasGo.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 30000;
-            var scaler = canvasGo.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920, 1080);
-            canvasGo.AddComponent<GraphicRaycaster>();
+            // Parent under the PDA's canvas so our panel inherits its
+            // uGUI_GraphicRaycaster. Subnautica's custom input module only
+            // routes events through that raycaster, not standard GraphicRaycaster.
+            Transform parentTransform = transform;
+            var pdaCanvas = FindPDACanvas();
+            if (pdaCanvas != null)
+            {
+                parentTransform = pdaCanvas.transform;
+            }
+            else
+            {
+                BeaconColorPickerPlugin.Log?.LogWarning(
+                    "ColorPickerPanel: Could not find PDA canvas — input may not work.");
+            }
 
             // Panel background
-            _panelRoot = new GameObject("Panel");
-            _panelRoot.transform.SetParent(canvasGo.transform, false);
+            _panelRoot = new GameObject("BeaconColorPickerRoot");
+            _panelRoot.transform.SetParent(parentTransform, false);
             var panelRt = _panelRoot.AddComponent<RectTransform>();
             panelRt.anchorMin = new Vector2(0.5f, 0.5f);
             panelRt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -106,6 +114,11 @@ namespace BeaconColorPicker
             panelRt.anchoredPosition = new Vector2(300, 0);
             var panelImg = _panelRoot.AddComponent<Image>();
             panelImg.color = new Color(0.1f, 0.1f, 0.1f, 0.95f);
+
+            // Block raycasts to PDA elements behind this panel
+            var cg = _panelRoot.AddComponent<CanvasGroup>();
+            cg.blocksRaycasts = true;
+            cg.interactable = true;
 
             // Title
             CreateLabel(_panelRoot.transform, "Color Picker", new Vector2(0, 125), 20, TextAnchor.MiddleCenter);
@@ -141,6 +154,14 @@ namespace BeaconColorPicker
             CreateButton(_panelRoot.transform, "Close", new Vector2(60, -125), new Color(0.5f, 0.2f, 0.2f, 1f), Hide);
 
             _panelRoot.SetActive(false);
+        }
+
+        private Canvas FindPDACanvas()
+        {
+            var pdaUI = FindObjectOfType<uGUI_PDA>();
+            if (pdaUI != null)
+                return pdaUI.GetComponentInParent<Canvas>();
+            return null;
         }
 
         private Image CreateHueGradient(Slider slider)

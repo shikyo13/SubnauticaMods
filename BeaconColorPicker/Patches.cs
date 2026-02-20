@@ -73,7 +73,8 @@ namespace BeaconColorPicker
     /// <summary>
     /// Adds a custom color "+" button to each ping entry in the PDA ping manager.
     /// Clones an existing color dot toggle, repositions it, and wires it to open
-    /// the ColorPickerPanel.
+    /// the ColorPickerPanel. Also applies custom colors to the entry icon and
+    /// selection indicator on initialization.
     /// </summary>
     [HarmonyPatch(typeof(uGUI_PingEntry), "Initialize")]
     internal static class uGUI_PingEntry_Initialize_Patch
@@ -90,6 +91,9 @@ namespace BeaconColorPicker
             {
                 // Update the button color if a custom color exists
                 UpdateButtonColor(existing.gameObject, id);
+                // Apply custom color to icon and indicator on re-init
+                if (CustomColorStore.TryGetColor(id, out Color c))
+                    ApplyCustomColorToEntry(__instance, c, existing.gameObject);
                 return;
             }
 
@@ -111,8 +115,13 @@ namespace BeaconColorPicker
             // Set appearance — white by default, custom color if one exists
             UpdateButtonColor(newToggleGo, id);
 
+            // Apply custom color to icon and indicator if one exists
+            if (CustomColorStore.TryGetColor(id, out Color customColor))
+                ApplyCustomColorToEntry(__instance, customColor, newToggleGo);
+
             // Wire click to open color picker
             string pingId = id; // Capture for closure
+            uGUI_PingEntry entry = __instance; // Capture for closure
             toggle.onValueChanged.RemoveAllListeners();
             toggle.onValueChanged.AddListener(isOn =>
             {
@@ -139,6 +148,10 @@ namespace BeaconColorPicker
                     if (p != null)
                         PingManager.NotifyColor(p);
 
+                    // Update PDA entry icon and indicator
+                    if (entry != null)
+                        ApplyCustomColorToEntry(entry, color, newToggleGo);
+
                     // Update the + button appearance
                     UpdateButtonColor(newToggleGo, pid);
                 });
@@ -146,6 +159,25 @@ namespace BeaconColorPicker
                 // Don't stay toggled on
                 toggle.SetIsOnWithoutNotify(false);
             });
+        }
+
+        /// <summary>
+        /// Updates the PDA entry's icon color and moves the selection indicator
+        /// to the custom color button.
+        /// </summary>
+        private static void ApplyCustomColorToEntry(uGUI_PingEntry entry, Color color, GameObject customButton)
+        {
+            // Update the ping type icon color
+            if (entry.icon != null)
+                entry.icon.SetForegroundColors(color, color, color);
+
+            // Move the selection indicator circle to the custom color button
+            if (entry.colorSelectionIndicator != null && customButton != null)
+            {
+                var btnRt = customButton.GetComponent<RectTransform>();
+                if (btnRt != null)
+                    entry.colorSelectionIndicator.position = btnRt.position;
+            }
         }
 
         private static void UpdateButtonColor(GameObject buttonGo, string pingId)
