@@ -24,6 +24,12 @@ namespace BeaconColorPicker
             _harmony = new Harmony(PLUGIN_GUID);
             _harmony.PatchAll();
 
+            // Log which patches were applied for diagnostics
+            foreach (var method in _harmony.GetPatchedMethods())
+            {
+                Log.LogInfo($"  Patched: {method.DeclaringType?.Name}.{method.Name}");
+            }
+
             Log.LogInfo($"{PLUGIN_NAME} v{PLUGIN_VERSION} loaded! Custom beacon colors enabled.");
         }
 

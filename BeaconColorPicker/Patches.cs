@@ -115,10 +115,10 @@ namespace BeaconColorPicker
                 if (CustomColorStore.TryGetColor(id, out Color c))
                     ApplyCustomColorToEntry(__instance, c, existing.gameObject);
 
-                // Re-wire toggle listener with current ping ID and entry (fixes stale closure)
-                var toggle = existing.GetComponent<Toggle>();
-                if (toggle != null)
-                    RewireToggleListener(toggle, id, __instance, existing.gameObject);
+                // Re-wire button listener with current ping ID and entry (fixes stale closure)
+                var button = existing.GetComponent<Button>();
+                if (button != null)
+                    RewireButtonListener(button, id, __instance, existing.gameObject);
 
                 SuppressSetColorRemoval = false;
                 return;
@@ -134,10 +134,15 @@ namespace BeaconColorPicker
             var lastRt = lastToggle.GetComponent<RectTransform>();
             rt.anchoredPosition = lastRt.anchoredPosition + new Vector2(rt.sizeDelta.x + 4f, 0f);
 
-            // Remove from toggle group so it doesn't interfere with preset selection
-            var newToggle = newToggleGo.GetComponent<Toggle>();
-            newToggle.group = null;
-            newToggle.isOn = false;
+            // Destroy the cloned Toggle — it carries persistent SetColorN callbacks from the prefab
+            // that RemoveAllListeners() can't remove, causing unwanted color resets
+            var oldToggle = newToggleGo.GetComponent<Toggle>();
+            if (oldToggle != null)
+                Object.DestroyImmediate(oldToggle);
+
+            // Add a clean Button — no persistent callbacks
+            var newButton = newToggleGo.AddComponent<Button>();
+            newButton.targetGraphic = newToggleGo.GetComponent<Image>();
 
             // Set appearance — white by default, custom color if one exists
             UpdateButtonColor(newToggleGo, id);
@@ -147,23 +152,21 @@ namespace BeaconColorPicker
                 ApplyCustomColorToEntry(__instance, customColor, newToggleGo);
 
             // Wire click to open color picker
-            RewireToggleListener(newToggle, id, __instance, newToggleGo);
+            RewireButtonListener(newButton, id, __instance, newToggleGo);
 
             SuppressSetColorRemoval = false;
         }
 
         /// <summary>
-        /// Wires (or re-wires) a toggle's onValueChanged to open the color picker
+        /// Wires (or re-wires) a Button's onClick to open the color picker
         /// for the given ping ID and entry. Used both for new buttons and re-init
         /// of pooled entries to prevent stale closures.
         /// </summary>
-        private static void RewireToggleListener(Toggle toggle, string pingId, uGUI_PingEntry entry, GameObject buttonGo)
+        private static void RewireButtonListener(Button button, string pingId, uGUI_PingEntry entry, GameObject buttonGo)
         {
-            toggle.onValueChanged.RemoveAllListeners();
-            toggle.onValueChanged.AddListener(isOn =>
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() =>
             {
-                if (!isOn) return;
-
                 // Get current color for the picker to start from
                 Color currentColor;
                 if (!CustomColorStore.TryGetColor(pingId, out currentColor))
@@ -192,9 +195,6 @@ namespace BeaconColorPicker
                     // Update the + button appearance
                     UpdateButtonColor(buttonGo, pid);
                 });
-
-                // Don't stay toggled on
-                toggle.SetIsOnWithoutNotify(false);
             });
         }
 
