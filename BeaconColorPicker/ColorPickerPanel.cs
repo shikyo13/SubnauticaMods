@@ -14,6 +14,8 @@ namespace BeaconColorPicker
         private Slider _valSlider;
         private Image _previewSwatch;
         private Image _hueBackground;
+        private Text _rgbLabel;
+        private InputField _hexInput;
 
         private string _currentPingId;
         private Action<string, Color> _onApply;
@@ -77,8 +79,13 @@ namespace BeaconColorPicker
 
         private void UpdatePreview()
         {
+            var color = CurrentColor;
             if (_previewSwatch != null)
-                _previewSwatch.color = CurrentColor;
+                _previewSwatch.color = color;
+            if (_rgbLabel != null)
+                _rgbLabel.text = $"R: {Mathf.RoundToInt(color.r * 255)}  G: {Mathf.RoundToInt(color.g * 255)}  B: {Mathf.RoundToInt(color.b * 255)}";
+            if (_hexInput != null && !_hexInput.isFocused)
+                _hexInput.text = $"#{ColorUtility.ToHtmlStringRGB(color)}";
         }
 
         private void OnApplyClicked()
@@ -110,7 +117,7 @@ namespace BeaconColorPicker
             var panelRt = _panelRoot.AddComponent<RectTransform>();
             panelRt.anchorMin = new Vector2(0.5f, 0.5f);
             panelRt.anchorMax = new Vector2(0.5f, 0.5f);
-            panelRt.sizeDelta = new Vector2(320, 300);
+            panelRt.sizeDelta = new Vector2(320, 360);
             panelRt.anchoredPosition = new Vector2(300, 0);
             var panelImg = _panelRoot.AddComponent<Image>();
             panelImg.color = new Color(0.1f, 0.1f, 0.1f, 0.95f);
@@ -149,9 +156,60 @@ namespace BeaconColorPicker
             _previewSwatch = swatchGo.AddComponent<Image>();
             _previewSwatch.color = Color.white;
 
+            // RGB readout (read-only)
+            var rgbGo = new GameObject("RGBLabel");
+            rgbGo.transform.SetParent(_panelRoot.transform, false);
+            var rgbRt = rgbGo.AddComponent<RectTransform>();
+            rgbRt.anchoredPosition = new Vector2(0, -110);
+            rgbRt.sizeDelta = new Vector2(280, 20);
+            _rgbLabel = rgbGo.AddComponent<Text>();
+            _rgbLabel.fontSize = 14;
+            _rgbLabel.color = Color.white;
+            _rgbLabel.alignment = TextAnchor.MiddleCenter;
+            _rgbLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+            // Hex input (editable)
+            var hexGo = new GameObject("HexInput");
+            hexGo.transform.SetParent(_panelRoot.transform, false);
+            var hexRt = hexGo.AddComponent<RectTransform>();
+            hexRt.anchoredPosition = new Vector2(0, -135);
+            hexRt.sizeDelta = new Vector2(120, 25);
+            var hexBg = hexGo.AddComponent<Image>();
+            hexBg.color = new Color(0.2f, 0.2f, 0.2f, 1f);
+
+            var hexTextGo = new GameObject("Text");
+            hexTextGo.transform.SetParent(hexGo.transform, false);
+            var hexTextRt = hexTextGo.AddComponent<RectTransform>();
+            hexTextRt.anchorMin = Vector2.zero;
+            hexTextRt.anchorMax = Vector2.one;
+            hexTextRt.offsetMin = new Vector2(5f, 2f);
+            hexTextRt.offsetMax = new Vector2(-5f, -2f);
+            var hexText = hexTextGo.AddComponent<Text>();
+            hexText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            hexText.fontSize = 14;
+            hexText.color = Color.white;
+            hexText.alignment = TextAnchor.MiddleCenter;
+            hexText.supportRichText = false;
+
+            _hexInput = hexGo.AddComponent<InputField>();
+            _hexInput.textComponent = hexText;
+            _hexInput.characterLimit = 7;
+            _hexInput.onEndEdit.AddListener(hexStr =>
+            {
+                if (string.IsNullOrEmpty(hexStr)) return;
+                string toParse = hexStr.StartsWith("#") ? hexStr : "#" + hexStr;
+                if (ColorUtility.TryParseHtmlString(toParse, out Color parsed))
+                {
+                    Color.RGBToHSV(parsed, out float h, out float s, out float v);
+                    _hueSlider.value = h;
+                    _satSlider.value = s;
+                    _valSlider.value = v;
+                }
+            });
+
             // Buttons
-            CreateButton(_panelRoot.transform, "Apply", new Vector2(-60, -125), new Color(0.2f, 0.6f, 0.2f, 1f), OnApplyClicked);
-            CreateButton(_panelRoot.transform, "Close", new Vector2(60, -125), new Color(0.5f, 0.2f, 0.2f, 1f), Hide);
+            CreateButton(_panelRoot.transform, "Apply", new Vector2(-60, -170), new Color(0.2f, 0.6f, 0.2f, 1f), OnApplyClicked);
+            CreateButton(_panelRoot.transform, "Close", new Vector2(60, -170), new Color(0.5f, 0.2f, 0.2f, 1f), Hide);
 
             _panelRoot.SetActive(false);
         }

@@ -61,6 +61,9 @@ namespace BeaconColorPicker
         [HarmonyPrefix]
         static void Prefix(uGUI_PingEntry __instance)
         {
+            // Skip removal when SetColor fires during Initialize re-init (not a user click)
+            if (uGUI_PingEntry_Initialize_Patch.SuppressSetColorRemoval) return;
+
             string pingId = Traverse.Create(__instance).Field("id").GetValue<string>();
             if (!string.IsNullOrEmpty(pingId))
             {
@@ -79,11 +82,28 @@ namespace BeaconColorPicker
     [HarmonyPatch(typeof(uGUI_PingEntry), "Initialize")]
     internal static class uGUI_PingEntry_Initialize_Patch
     {
+        /// <summary>
+        /// When true, the SetColor prefix skips removing custom colors.
+        /// Set during Initialize to prevent re-init from wiping stored colors.
+        /// </summary>
+        internal static bool SuppressSetColorRemoval;
+
+        [HarmonyPrefix]
+        static void Prefix() => SuppressSetColorRemoval = true;
+
         [HarmonyPostfix]
         static void Postfix(uGUI_PingEntry __instance, string id, int colorIndex)
         {
+            BeaconColorPickerPlugin.Log.LogInfo($"Initialize fired for ping '{id}' (colorIndex={colorIndex})");
+
             Toggle[] toggles = __instance.colorSelectors;
-            if (toggles == null || toggles.Length == 0) return;
+            if (toggles == null || toggles.Length == 0)
+            {
+                BeaconColorPickerPlugin.Log.LogWarning($"  colorSelectors is null or empty, skipping.");
+                SuppressSetColorRemoval = false;
+                return;
+            }
+            BeaconColorPickerPlugin.Log.LogInfo($"  colorSelectors count: {toggles.Length}");
 
             // Prevent duplicate buttons on re-initialization
             Transform existing = __instance.transform.Find("CustomColorButton");
@@ -94,6 +114,13 @@ namespace BeaconColorPicker
                 // Apply custom color to icon and indicator on re-init
                 if (CustomColorStore.TryGetColor(id, out Color c))
                     ApplyCustomColorToEntry(__instance, c, existing.gameObject);
+
+                // Re-wire toggle listener with current ping ID and entry (fixes stale closure)
+                var toggle = existing.GetComponent<Toggle>();
+                if (toggle != null)
+                    RewireToggleListener(toggle, id, __instance, existing.gameObject);
+
+                SuppressSetColorRemoval = false;
                 return;
             }
 
@@ -108,9 +135,9 @@ namespace BeaconColorPicker
             rt.anchoredPosition = lastRt.anchoredPosition + new Vector2(rt.sizeDelta.x + 4f, 0f);
 
             // Remove from toggle group so it doesn't interfere with preset selection
-            var toggle = newToggleGo.GetComponent<Toggle>();
-            toggle.group = null;
-            toggle.isOn = false;
+            var newToggle = newToggleGo.GetComponent<Toggle>();
+            newToggle.group = null;
+            newToggle.isOn = false;
 
             // Set appearance — white by default, custom color if one exists
             UpdateButtonColor(newToggleGo, id);
@@ -120,8 +147,18 @@ namespace BeaconColorPicker
                 ApplyCustomColorToEntry(__instance, customColor, newToggleGo);
 
             // Wire click to open color picker
-            string pingId = id; // Capture for closure
-            uGUI_PingEntry entry = __instance; // Capture for closure
+            RewireToggleListener(newToggle, id, __instance, newToggleGo);
+
+            SuppressSetColorRemoval = false;
+        }
+
+        /// <summary>
+        /// Wires (or re-wires) a toggle's onValueChanged to open the color picker
+        /// for the given ping ID and entry. Used both for new buttons and re-init
+        /// of pooled entries to prevent stale closures.
+        /// </summary>
+        private static void RewireToggleListener(Toggle toggle, string pingId, uGUI_PingEntry entry, GameObject buttonGo)
+        {
             toggle.onValueChanged.RemoveAllListeners();
             toggle.onValueChanged.AddListener(isOn =>
             {
@@ -150,10 +187,10 @@ namespace BeaconColorPicker
 
                     // Update PDA entry icon and indicator
                     if (entry != null)
-                        ApplyCustomColorToEntry(entry, color, newToggleGo);
+                        ApplyCustomColorToEntry(entry, color, buttonGo);
 
                     // Update the + button appearance
-                    UpdateButtonColor(newToggleGo, pid);
+                    UpdateButtonColor(buttonGo, pid);
                 });
 
                 // Don't stay toggled on
