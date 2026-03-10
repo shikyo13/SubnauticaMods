@@ -1,10 +1,10 @@
 using BepInEx;
-using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using Nautilus.Handlers;
 using UnityEngine;
 
-namespace PowerSaver
+namespace PowerSaver.BZ
 {
     /// <summary>
     /// Accumulates energy drain stats and logs a periodic summary every 30 seconds.
@@ -54,7 +54,7 @@ namespace PowerSaver
 
             double pct = saved / totalOriginal * 100.0;
 
-            PowerSaverPlugin.Log.LogInfo(
+            PowerSaverBZPlugin.Log.LogInfo(
                 $"[PowerSaver] {LogInterval}s summary — Total: {(float)totalOriginal:F2} → {(float)totalAdjusted:F2} " +
                 $"(saved {(float)saved:F2}, {pct:F0}%) | Tools: {(float)_toolsAdjusted:F2} | Vehicles: {(float)_vehicleAdjusted:F2} | Base: {(float)_baseAdjusted:F2}");
 
@@ -65,17 +65,15 @@ namespace PowerSaver
     }
 
     [BepInPlugin(PLUGIN_GUID, PLUGIN_NAME, PLUGIN_VERSION)]
-    public class PowerSaverPlugin : BaseUnityPlugin
+    [BepInDependency("com.snmodding.nautilus")]
+    public class PowerSaverBZPlugin : BaseUnityPlugin
     {
-        public const string PLUGIN_GUID = "com.zerotheabsolute.powersaver";
-        public const string PLUGIN_NAME = "PowerSaver";
+        public const string PLUGIN_GUID = "com.zerotheabsolute.powersaver.bz";
+        public const string PLUGIN_NAME = "PowerSaver BZ";
         public const string PLUGIN_VERSION = "1.0.0";
 
         internal static ManualLogSource Log;
-        internal static ConfigEntry<float> DrainMultiplier;
-        internal static ConfigEntry<float> VehicleDrainMultiplier;
-        internal static ConfigEntry<float> BaseDrainMultiplier;
-        internal static ConfigEntry<bool> EnableLogging;
+        internal static PowerSaverConfig Options;
 
         private static Harmony _harmony;
 
@@ -83,48 +81,12 @@ namespace PowerSaver
         {
             Log = Logger;
 
-            // Config entries - these show up in BepInEx config file
-            DrainMultiplier = Config.Bind(
-                "General",
-                "DrainMultiplier",
-                0.75f,
-                new ConfigDescription(
-                    "Global power drain multiplier. 0.75 = 25% less drain, 0.5 = 50% less drain, 1.0 = vanilla.",
-                    new AcceptableValueRange<float>(0.01f, 2.0f)
-                )
-            );
-
-            VehicleDrainMultiplier = Config.Bind(
-                "Vehicles",
-                "VehicleDrainMultiplier",
-                0.75f,
-                new ConfigDescription(
-                    "Vehicle-specific power drain multiplier (Seamoth, Prawn, Cyclops engines). Stacks with global multiplier if both < 1.0. Set to 1.0 to only use global.",
-                    new AcceptableValueRange<float>(0.01f, 2.0f)
-                )
-            );
-
-            BaseDrainMultiplier = Config.Bind(
-                "Base",
-                "BaseDrainMultiplier",
-                0.75f,
-                new ConfigDescription(
-                    "Base power drain multiplier for habitat power relays. Set to 1.0 to only use global.",
-                    new AcceptableValueRange<float>(0.01f, 2.0f)
-                )
-            );
-
-            EnableLogging = Config.Bind(
-                "Debug",
-                "EnableLogging",
-                false,
-                "Log power drain events to console (noisy, for debugging only)."
-            );
+            Options = OptionsPanelHandler.RegisterModOptions<PowerSaverConfig>();
 
             _harmony = new Harmony(PLUGIN_GUID);
             _harmony.PatchAll();
 
-            Log.LogInfo($"{PLUGIN_NAME} v{PLUGIN_VERSION} loaded! Global drain: {DrainMultiplier.Value}x | Vehicles: {VehicleDrainMultiplier.Value}x | Base: {BaseDrainMultiplier.Value}x");
+            Log.LogInfo($"{PLUGIN_NAME} v{PLUGIN_VERSION} loaded! Global drain: {Options.DrainMultiplier}x | Vehicles: {Options.VehicleDrainMultiplier}x | Base: {Options.BaseDrainMultiplier}x");
         }
 
         private void OnDestroy()
@@ -143,18 +105,18 @@ namespace PowerSaver
         [HarmonyPrefix]
         static void Prefix(ref float amount)
         {
-            float multiplier = PowerSaverPlugin.DrainMultiplier.Value;
+            float multiplier = PowerSaverBZPlugin.Options.DrainMultiplier;
             float original = amount;
             amount *= multiplier;
 
-            if (PowerSaverPlugin.EnableLogging.Value)
+            if (PowerSaverBZPlugin.Options.EnableLogging)
                 PowerSaverDiagnostics.RecordEnergyMixin(original, amount);
         }
     }
 
     /// <summary>
-    /// Vehicle-specific patch: catches Seamoth, Prawn Suit, and Cyclops
-    /// engine power consumption that goes through the vehicle energy interface.
+    /// Vehicle-specific patch: catches vehicle engine power consumption
+    /// that goes through the vehicle energy interface.
     /// Uses explicit argument types to resolve overload ambiguity.
     /// </summary>
     [HarmonyPatch]
@@ -168,7 +130,7 @@ namespace PowerSaver
             var method = AccessTools.Method(typeof(Vehicle), "ConsumeEnergy", new[] { typeof(float) });
             if (method != null)
             {
-                PowerSaverPlugin.Log.LogDebug("[PowerSaver] Found Vehicle.ConsumeEnergy(float)");
+                PowerSaverBZPlugin.Log.LogDebug("[PowerSaver BZ] Found Vehicle.ConsumeEnergy(float)");
                 return method;
             }
 
@@ -176,22 +138,22 @@ namespace PowerSaver
             method = AccessTools.Method(typeof(Vehicle), "ConsumeEnergy", new[] { typeof(float), typeof(float).MakeByRefType() });
             if (method != null)
             {
-                PowerSaverPlugin.Log.LogDebug("[PowerSaver] Found Vehicle.ConsumeEnergy(float, out float)");
+                PowerSaverBZPlugin.Log.LogDebug("[PowerSaver BZ] Found Vehicle.ConsumeEnergy(float, out float)");
                 return method;
             }
 
-            PowerSaverPlugin.Log.LogWarning("[PowerSaver] Could not find Vehicle.ConsumeEnergy - vehicle patch disabled!");
+            PowerSaverBZPlugin.Log.LogWarning("[PowerSaver BZ] Could not find Vehicle.ConsumeEnergy - vehicle patch disabled!");
             return null;
         }
 
         [HarmonyPrefix]
         static void Prefix(ref float amount)
         {
-            float multiplier = PowerSaverPlugin.VehicleDrainMultiplier.Value;
+            float multiplier = PowerSaverBZPlugin.Options.VehicleDrainMultiplier;
             float original = amount;
             amount *= multiplier;
 
-            if (PowerSaverPlugin.EnableLogging.Value)
+            if (PowerSaverBZPlugin.Options.EnableLogging)
                 PowerSaverDiagnostics.RecordVehicle(original, amount);
         }
     }
@@ -211,11 +173,11 @@ namespace PowerSaver
                 new[] { typeof(float), typeof(float).MakeByRefType() });
             if (method != null)
             {
-                PowerSaverPlugin.Log.LogDebug("[PowerSaver] Found PowerRelay.ModifyPower(float, out float)");
+                PowerSaverBZPlugin.Log.LogDebug("[PowerSaver BZ] Found PowerRelay.ModifyPower(float, out float)");
                 return method;
             }
 
-            PowerSaverPlugin.Log.LogWarning("[PowerSaver] Could not find PowerRelay.ModifyPower - base patch disabled!");
+            PowerSaverBZPlugin.Log.LogWarning("[PowerSaver BZ] Could not find PowerRelay.ModifyPower - base patch disabled!");
             return null;
         }
 
@@ -224,11 +186,11 @@ namespace PowerSaver
         {
             if (amount >= 0f) return;
 
-            float multiplier = PowerSaverPlugin.BaseDrainMultiplier.Value;
+            float multiplier = PowerSaverBZPlugin.Options.BaseDrainMultiplier;
             float original = amount;
             amount *= multiplier;
 
-            if (PowerSaverPlugin.EnableLogging.Value)
+            if (PowerSaverBZPlugin.Options.EnableLogging)
                 PowerSaverDiagnostics.RecordBase(original, amount);
         }
     }

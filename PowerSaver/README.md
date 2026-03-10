@@ -16,7 +16,7 @@ Each has an independent multiplier so you can fine-tune exactly what gets reduce
 
 After first launch, a config file is generated at:
 ```
-BepInEx\config\com.adam.powersaver.cfg
+BepInEx\config\com.zerotheabsolute.powersaver.cfg
 ```
 
 ### Settings
