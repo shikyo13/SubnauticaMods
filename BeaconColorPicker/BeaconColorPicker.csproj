@@ -73,6 +73,11 @@
     </Reference>
   </ItemGroup>
 
+  <!-- Shared source (compiled into this assembly) -->
+  <ItemGroup>
+    <Compile Include="..\Shared\ColorPicker\ColorPickerPanel.cs" Link="Shared\ColorPickerPanel.cs" />
+  </ItemGroup>
+
   <!-- JSON serialization -->
   <ItemGroup>
     <Reference Include="Newtonsoft.Json">

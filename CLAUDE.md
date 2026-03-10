@@ -1,17 +1,21 @@
 # SubnauticaMods
 
-Monorepo of BepInEx 5 mods for Subnautica. Each subdirectory is a standalone mod with its own `.sln`/`.csproj`.
+Monorepo of BepInEx 5 mods for Subnautica and Subnautica: Below Zero. Each subdirectory is a standalone mod with its own `.sln`/`.csproj`. BZ ports live in `<ModName>.BZ/` directories.
 
 ## Key Directories
 
 | Path | Purpose |
 |-|-|
-| `<ModName>/` | Mod source (plugin, patches, properties) |
+| `<ModName>/` | SN1 mod source (plugin, patches, properties) |
+| `<ModName>.BZ/` | BZ mod source (same structure as SN1) |
+| `Shared/ColorPicker/` | Shared HSV color picker UI (compiled into each mod via `<Compile Include>` link) |
 | `<ModName>/Properties/AssemblyInfo.cs` | Manual version sync (GenerateAssemblyInfo=false) |
-| `D:\SteamLibrary\steamapps\common\Subnautica` | Game install |
-| `Subnautica_Data\Managed\Assembly-CSharp.dll` | Game logic (decompilable .NET) |
-| `BepInEx\core\` | BepInEx.dll, 0Harmony.dll |
-| `BepInEx\plugins\` | Deployed mod DLLs |
+| `D:\SteamLibrary\steamapps\common\Subnautica` | SN1 game install |
+| `D:\SteamLibrary\steamapps\common\SubnauticaZero` | BZ game install |
+| `Subnautica_Data\Managed\Assembly-CSharp.dll` | SN1 game logic |
+| `SubnauticaZero_Data\Managed\Assembly-CSharp.dll` | BZ game logic |
+| `BepInEx\core\` | BepInEx.dll, 0Harmony.dll (both games) |
+| `BepInEx\plugins\` | Deployed mod DLLs (both games) |
 | `BepInEx\LogOutput.log` | First place to check for errors |
 
 ## Build & Deploy
@@ -23,7 +27,7 @@ dotnet build <ModName>/<ModName>.csproj -c Release   # CopyToPlugins target auto
 ## Coding Conventions
 
 - **Target**: .NET Framework 4.7.2, Unity 2019.4.36, Mono runtime
-- **GUID**: `com.adam.<modname>` (reverse domain)
+- **GUID**: `com.zerotheabsolute.<modname>` (SN1), `com.zerotheabsolute.<modname>.bz` (BZ)
 - **Plugin class**: `<ModName>Plugin : BaseUnityPlugin`
 - **Patches**: `internal static` classes with `[HarmonyPatch]` attributes
 - **Version sync**: update BOTH plugin `const string` AND `Properties/AssemblyInfo.cs`
@@ -37,11 +41,26 @@ dotnet build <ModName>/<ModName>.csproj -c Release   # CopyToPlugins target auto
 
 ## Mod Inventory
 
-| Mod | Version | Summary |
-|-|-|-|
-| PowerSaver | 1.0.0 | Reduces power drain (prefix patches on `ConsumeEnergy`) |
-| CameraStalkerGuard | 1.0.0 | Prevents stalkers targeting cameras (`CollectShiny.IsTargetValid`) |
-| BeaconColorPicker | 1.0.1 | Custom beacon colors with RGB/hex display |
+| Mod | Version | Game | Summary |
+|-|-|-|-|
+| PowerSaver | 1.0.0 | SN1 | Reduces power drain (prefix patches on `ConsumeEnergy`) |
+| PowerSaver.BZ | 1.0.0 | BZ | BZ port of PowerSaver |
+| CameraStalkerGuard | 1.0.0 | SN1 | Prevents stalkers targeting cameras (`CollectShiny.IsTargetValid`) |
+| CameraStalkerGuard.BZ | 1.0.0 | BZ | BZ port of CameraStalkerGuard |
+| BeaconColorPicker | 1.0.1 | SN1 | Custom beacon colors with RGB/hex display |
+| BeaconColorPicker.BZ | 1.0.1 | BZ | BZ port of BeaconColorPicker |
+| AltMeter | 1.0.0 | SN1 | Shows altitude on depth compass when above water |
+| AltMeter.BZ | 1.0.0 | BZ | BZ port with configurable text colors (Nautilus) |
+| MapRoomCameraLights | 1.0.0 | SN1 | Configurable scanner room camera lights (Nautilus) |
+| MapRoomCameraLights.BZ | 1.0.0 | BZ | BZ port of MapRoomCameraLights (Nautilus) |
+| BetterFlashLight | 1.0.0 | SN1 | Custom flashlight color/brightness/range (Nautilus) |
+| BetterFlashLight.BZ | 1.0.0 | BZ | BZ port, patches `ToggleLights.Update` (Nautilus) |
+| DockLightsToggle | 1.0.0 | BZ | Turns off vehicle lights when docked (Nautilus) |
+| JukeboxMod | 1.0.0 | BZ | Custom jukebox colors + party mode lighting |
+| BetterSeaglide | 1.0.0 | SN1 | Speed boost + custom light/body/energy bar colors (Nautilus) |
+| BetterSeaglide.BZ | 1.0.0 | BZ | BZ port of BetterSeaglide (Nautilus) |
+| WaterFoodHotkey | 1.0.0 | SN1 | Auto-eat/drink hotkeys via GameInput (Nautilus) |
+| WaterFoodHotkey.BZ | 1.0.0 | BZ | BZ port with food/drink/health/heat hotkeys (Nautilus) |
 
 ## Documentation
 

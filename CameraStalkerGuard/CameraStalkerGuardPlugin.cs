@@ -8,7 +8,7 @@ namespace CameraStalkerGuard
     [BepInPlugin(PLUGIN_GUID, PLUGIN_NAME, PLUGIN_VERSION)]
     public class CameraStalkerGuardPlugin : BaseUnityPlugin
     {
-        public const string PLUGIN_GUID = "com.adam.camerastalkerguard";
+        public const string PLUGIN_GUID = "com.zerotheabsolute.camerastalkerguard";
         public const string PLUGIN_NAME = "CameraStalkerGuard";
         public const string PLUGIN_VERSION = "1.0.0";
 

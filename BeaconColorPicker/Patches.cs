@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
+using SubnauticaMods.Shared;
 
 namespace BeaconColorPicker
 {
@@ -33,14 +35,15 @@ namespace BeaconColorPicker
     [HarmonyPatch(typeof(uGUI_Pings), "OnAdd")]
     internal static class uGUI_Pings_OnAdd_Patch
     {
+        private static readonly FieldInfo _pingsField = AccessTools.Field(typeof(uGUI_Pings), "pings");
+
         [HarmonyPostfix]
         static void Postfix(uGUI_Pings __instance, PingInstance instance)
         {
             if (instance == null) return;
             if (!CustomColorStore.TryGetColor(instance._id, out Color customColor)) return;
 
-            var pingsDict = Traverse.Create(__instance).Field("pings")
-                .GetValue<Dictionary<string, uGUI_Ping>>();
+            var pingsDict = (Dictionary<string, uGUI_Ping>)_pingsField.GetValue(__instance);
             if (pingsDict != null && pingsDict.TryGetValue(instance._id, out uGUI_Ping hudPing))
             {
                 hudPing.SetColor(customColor);
@@ -58,13 +61,15 @@ namespace BeaconColorPicker
     [HarmonyPatch(typeof(uGUI_PingEntry), "SetColor")]
     internal static class uGUI_PingEntry_SetColor_Patch
     {
+        private static readonly FieldInfo _idField = AccessTools.Field(typeof(uGUI_PingEntry), "id");
+
         [HarmonyPrefix]
         static void Prefix(uGUI_PingEntry __instance)
         {
             // Skip removal when SetColor fires during Initialize re-init (not a user click)
             if (uGUI_PingEntry_Initialize_Patch.SuppressSetColorRemoval) return;
 
-            string pingId = Traverse.Create(__instance).Field("id").GetValue<string>();
+            string pingId = (string)_idField.GetValue(__instance);
             if (!string.IsNullOrEmpty(pingId))
             {
                 CustomColorStore.RemoveColor(pingId);
@@ -94,67 +99,67 @@ namespace BeaconColorPicker
         [HarmonyPostfix]
         static void Postfix(uGUI_PingEntry __instance, string id, int colorIndex)
         {
-            BeaconColorPickerPlugin.Log.LogInfo($"Initialize fired for ping '{id}' (colorIndex={colorIndex})");
-
-            Toggle[] toggles = __instance.colorSelectors;
-            if (toggles == null || toggles.Length == 0)
+            try
             {
-                BeaconColorPickerPlugin.Log.LogWarning($"  colorSelectors is null or empty, skipping.");
-                SuppressSetColorRemoval = false;
-                return;
-            }
-            BeaconColorPickerPlugin.Log.LogInfo($"  colorSelectors count: {toggles.Length}");
+                Toggle[] toggles = __instance.colorSelectors;
+                if (toggles == null || toggles.Length == 0)
+                {
+                    BeaconColorPickerPlugin.Log.LogWarning($"  colorSelectors is null or empty, skipping.");
+                    return;
+                }
 
-            // Prevent duplicate buttons on re-initialization
-            Transform existing = __instance.transform.Find("CustomColorButton");
-            if (existing != null)
+                // Prevent duplicate buttons on re-initialization
+                Transform existing = __instance.transform.Find("CustomColorButton");
+                if (existing != null)
+                {
+                    // Update the button color if a custom color exists
+                    UpdateButtonColor(existing.gameObject, id);
+                    // Apply custom color to icon and indicator on re-init
+                    if (CustomColorStore.TryGetColor(id, out Color c))
+                        ApplyCustomColorToEntry(__instance, c, existing.gameObject);
+
+                    // Re-wire button listener with current ping ID and entry (fixes stale closure)
+                    var button = existing.GetComponent<Button>();
+                    if (button != null)
+                        RewireButtonListener(button, id, __instance, existing.gameObject);
+
+                    return;
+                }
+
+                // Clone the last color toggle as our "+" button
+                Toggle lastToggle = toggles[toggles.Length - 1];
+                var newToggleGo = Object.Instantiate(lastToggle.gameObject, lastToggle.transform.parent);
+                newToggleGo.name = "CustomColorButton";
+
+                // Position after the last toggle
+                var rt = newToggleGo.GetComponent<RectTransform>();
+                var lastRt = lastToggle.GetComponent<RectTransform>();
+                rt.anchoredPosition = lastRt.anchoredPosition + new Vector2(rt.sizeDelta.x + 4f, 0f);
+
+                // Destroy the cloned Toggle — it carries persistent SetColorN callbacks from the prefab
+                // that RemoveAllListeners() can't remove, causing unwanted color resets
+                var oldToggle = newToggleGo.GetComponent<Toggle>();
+                if (oldToggle != null)
+                    Object.DestroyImmediate(oldToggle);
+
+                // Add a clean Button — no persistent callbacks
+                var newButton = newToggleGo.AddComponent<Button>();
+                newButton.targetGraphic = newToggleGo.GetComponent<Image>();
+
+                // Set appearance — white by default, custom color if one exists
+                UpdateButtonColor(newToggleGo, id);
+
+                // Apply custom color to icon and indicator if one exists
+                if (CustomColorStore.TryGetColor(id, out Color customColor))
+                    ApplyCustomColorToEntry(__instance, customColor, newToggleGo);
+
+                // Wire click to open color picker
+                RewireButtonListener(newButton, id, __instance, newToggleGo);
+            }
+            finally
             {
-                // Update the button color if a custom color exists
-                UpdateButtonColor(existing.gameObject, id);
-                // Apply custom color to icon and indicator on re-init
-                if (CustomColorStore.TryGetColor(id, out Color c))
-                    ApplyCustomColorToEntry(__instance, c, existing.gameObject);
-
-                // Re-wire button listener with current ping ID and entry (fixes stale closure)
-                var button = existing.GetComponent<Button>();
-                if (button != null)
-                    RewireButtonListener(button, id, __instance, existing.gameObject);
-
                 SuppressSetColorRemoval = false;
-                return;
             }
-
-            // Clone the last color toggle as our "+" button
-            Toggle lastToggle = toggles[toggles.Length - 1];
-            var newToggleGo = Object.Instantiate(lastToggle.gameObject, lastToggle.transform.parent);
-            newToggleGo.name = "CustomColorButton";
-
-            // Position after the last toggle
-            var rt = newToggleGo.GetComponent<RectTransform>();
-            var lastRt = lastToggle.GetComponent<RectTransform>();
-            rt.anchoredPosition = lastRt.anchoredPosition + new Vector2(rt.sizeDelta.x + 4f, 0f);
-
-            // Destroy the cloned Toggle — it carries persistent SetColorN callbacks from the prefab
-            // that RemoveAllListeners() can't remove, causing unwanted color resets
-            var oldToggle = newToggleGo.GetComponent<Toggle>();
-            if (oldToggle != null)
-                Object.DestroyImmediate(oldToggle);
-
-            // Add a clean Button — no persistent callbacks
-            var newButton = newToggleGo.AddComponent<Button>();
-            newButton.targetGraphic = newToggleGo.GetComponent<Image>();
-
-            // Set appearance — white by default, custom color if one exists
-            UpdateButtonColor(newToggleGo, id);
-
-            // Apply custom color to icon and indicator if one exists
-            if (CustomColorStore.TryGetColor(id, out Color customColor))
-                ApplyCustomColorToEntry(__instance, customColor, newToggleGo);
-
-            // Wire click to open color picker
-            RewireButtonListener(newButton, id, __instance, newToggleGo);
-
-            SuppressSetColorRemoval = false;
         }
 
         /// <summary>

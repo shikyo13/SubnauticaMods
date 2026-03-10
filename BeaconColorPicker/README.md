@@ -34,12 +34,12 @@ Replaces the limited 5-color preset palette with a full-spectrum HSV color picke
 
 4. Launch Subnautica and check `BepInEx\LogOutput.log` for:
    ```
-   [Info : BeaconColorPicker] BeaconColorPicker v1.0.0 loaded! Custom beacon colors enabled.
+   [Info : BeaconColorPicker] BeaconColorPicker v1.0.1 loaded! Custom beacon colors enabled.
    ```
 
 ## Configuration
 
-Custom colors are stored in `BepInEx/config/com.adam.beaconcolorpicker.json`. This file is separate from game saves — colors persist across save files. If you uninstall the mod, beacons revert to their last preset color.
+Custom colors are stored in `BepInEx/config/com.zerotheabsolute.beaconcolorpicker.json`. This file is separate from game saves — colors persist across save files. If you uninstall the mod, beacons revert to their last preset color.
 
 ## Compatibility
 

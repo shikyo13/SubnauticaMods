@@ -1,13 +1,14 @@
 using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
+using SubnauticaMods.Shared;
 
 namespace BeaconColorPicker
 {
     [BepInPlugin(PLUGIN_GUID, PLUGIN_NAME, PLUGIN_VERSION)]
     public class BeaconColorPickerPlugin : BaseUnityPlugin
     {
-        public const string PLUGIN_GUID = "com.adam.beaconcolorpicker";
+        public const string PLUGIN_GUID = "com.zerotheabsolute.beaconcolorpicker";
         public const string PLUGIN_NAME = "BeaconColorPicker";
         public const string PLUGIN_VERSION = "1.0.1";
 
@@ -18,6 +19,7 @@ namespace BeaconColorPicker
         private void Awake()
         {
             Log = Logger;
+            ColorPickerPanel.LogWarning = msg => Log.LogWarning(msg);
 
             CustomColorStore.Load();
 

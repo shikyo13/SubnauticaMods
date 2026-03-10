@@ -9,8 +9,17 @@ namespace BeaconColorPicker
     {
         private static Dictionary<string, SerializableColor> _colors = new Dictionary<string, SerializableColor>();
 
-        private static string FilePath => Path.Combine(
+        private static readonly string OldFilePath = Path.Combine(
             BepInEx.Paths.ConfigPath, "com.adam.beaconcolorpicker.json");
+
+        private static string FilePath => Path.Combine(
+            BepInEx.Paths.ConfigPath, "com.zerotheabsolute.beaconcolorpicker.json");
+
+        static CustomColorStore()
+        {
+            if (File.Exists(OldFilePath) && !File.Exists(FilePath))
+                File.Move(OldFilePath, FilePath);
+        }
 
         public static bool TryGetColor(string pingId, out Color color)
         {
