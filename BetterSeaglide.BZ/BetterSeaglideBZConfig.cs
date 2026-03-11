@@ -16,8 +16,8 @@ namespace BetterSeaglide.BZ
         [Slider("Boost Speed Addition", 0f, 20f, DefaultValue = 0f, Step = 0.5f)]
         public float BoostAddition = 0f;
 
-        [Slider("Boost Speed Multiplier", 1.0f, 5.0f, DefaultValue = 1.5f, Step = 0.1f)]
-        public float BoostMultiplier = 1.5f;
+        [Slider("Boost Speed Multiplier", 1.0f, 10.0f, DefaultValue = 2.0f, Step = 0.05f)]
+        public float BoostMultiplier = 2.0f;
 
         [Toggle("Enable Light Color")]
         public bool ToggleLightColor = false;

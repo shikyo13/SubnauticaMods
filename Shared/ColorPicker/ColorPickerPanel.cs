@@ -1,7 +1,6 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
-
 namespace SubnauticaMods.Shared
 {
     public class ColorPickerPanel : MonoBehaviour
@@ -46,6 +45,13 @@ namespace SubnauticaMods.Shared
             if (_panelRoot == null)
                 BuildUI();
 
+            // Parent under the active game canvas so we inherit its
+            // uGUI_GraphicRaycaster and uGUI_InputGroup. FPSInputModule
+            // only routes events to elements inside the active input group.
+            var targetCanvas = FindActiveCanvas();
+            if (targetCanvas != null)
+                _panelRoot.transform.SetParent(targetCanvas.transform, false);
+
             _contextId = contextId;
             _onApply = onApply;
 
@@ -56,7 +62,16 @@ namespace SubnauticaMods.Shared
             UpdatePreview();
 
             _panelRoot.SetActive(true);
-            _panelRoot.transform.SetAsLastSibling();
+        }
+
+        private static Canvas FindActiveCanvas()
+        {
+            if (FPSInputModule.current != null && FPSInputModule.current.lastGroup != null)
+            {
+                var canvas = FPSInputModule.current.lastGroup.GetComponentInParent<Canvas>();
+                if (canvas != null) return canvas;
+            }
+            return null;
         }
 
         public void Hide()
@@ -67,14 +82,8 @@ namespace SubnauticaMods.Shared
 
         private void Update()
         {
-            if (IsVisible)
-            {
-                bool pdaOpen = Player.main != null
-                    && Player.main.GetPDA() != null
-                    && Player.main.GetPDA().isOpen;
-                if (!pdaOpen)
-                    Hide();
-            }
+            if (IsVisible && Cursor.lockState == CursorLockMode.Locked)
+                Hide();
         }
 
         private Color CurrentColor =>
@@ -99,19 +108,8 @@ namespace SubnauticaMods.Shared
 
         private void BuildUI()
         {
-            Transform parentTransform = transform;
-            var pdaCanvas = FindPDACanvas();
-            if (pdaCanvas != null)
-            {
-                parentTransform = pdaCanvas.transform;
-            }
-            else
-            {
-                LogWarning?.Invoke("ColorPickerPanel: Could not find PDA canvas — input may not work.");
-            }
-
             _panelRoot = new GameObject("ColorPickerRoot");
-            _panelRoot.transform.SetParent(parentTransform, false);
+            _panelRoot.transform.SetParent(transform, false);
             var panelRt = _panelRoot.AddComponent<RectTransform>();
             panelRt.anchorMin = new Vector2(0.5f, 0.5f);
             panelRt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -201,14 +199,6 @@ namespace SubnauticaMods.Shared
             CreateButton(_panelRoot.transform, "Close", new Vector2(60, -170), new Color(0.5f, 0.2f, 0.2f, 1f), Hide);
 
             _panelRoot.SetActive(false);
-        }
-
-        private Canvas FindPDACanvas()
-        {
-            var pdaUI = FindObjectOfType<uGUI_PDA>();
-            if (pdaUI != null)
-                return pdaUI.GetComponentInParent<Canvas>();
-            return null;
         }
 
         private Image CreateHueGradient(Slider slider)
