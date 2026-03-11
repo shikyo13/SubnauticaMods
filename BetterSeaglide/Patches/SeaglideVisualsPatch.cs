@@ -13,7 +13,6 @@ namespace BetterSeaglide.Patches
         private static Seaglide _cachedInstance;
         private static Light[] _cachedLights;
         private static SkinnedMeshRenderer[] _cachedSkinned;
-        private static MeshRenderer[] _cachedMesh;
         private static VehicleInterface_EnergyBar _cachedEnergyBar;
 
         [HarmonyPostfix]
@@ -45,7 +44,6 @@ namespace BetterSeaglide.Patches
             _cachedInstance = sg;
             _cachedLights = sg.toggleLights?.lightsParent?.GetComponentsInChildren<Light>();
             _cachedSkinned = sg.GetComponentsInChildren<SkinnedMeshRenderer>();
-            _cachedMesh = sg.GetComponentsInChildren<MeshRenderer>();
             _cachedEnergyBar = sg.GetComponentInChildren<VehicleInterface_EnergyBar>();
         }
 
@@ -61,23 +59,14 @@ namespace BetterSeaglide.Patches
 
         private static void ApplyBodyColor(Color color)
         {
-            if (_cachedSkinned != null)
+            if (_cachedSkinned == null) return;
+            for (int i = 0; i < _cachedSkinned.Length; i++)
             {
-                for (int i = 0; i < _cachedSkinned.Length; i++)
-                {
-                    if (_cachedSkinned[i] != null && _cachedSkinned[i].name.Contains("SeaGlide_geo"))
-                        _cachedSkinned[i].material.color = color;
-                }
+                if (_cachedSkinned[i] != null && _cachedSkinned[i].name.Contains("SeaGlide_geo"))
+                    _cachedSkinned[i].material.color = color;
             }
-
-            if (_cachedMesh != null)
-            {
-                for (int i = 0; i < _cachedMesh.Length; i++)
-                {
-                    if (_cachedMesh[i] != null && _cachedMesh[i].name.Contains("SeaGlide_01_TP"))
-                        _cachedMesh[i].material.color = color;
-                }
-            }
+            // MeshRenderers intentionally excluded — they include the minimap
+            // screen display, and setting material.color overwrites the map texture.
         }
 
         private static void ApplyEnergyBarColor(Color color)

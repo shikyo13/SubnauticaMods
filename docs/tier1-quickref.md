@@ -55,6 +55,17 @@ Read this every session. One-liner gotchas and architecture essentials.
 4. Wrap in try/catch to prevent game crashes
 5. No logging, no allocations, no LINQ
 
+## UI / Input System
+
+- **FPSInputModule** is SN's custom input module — uses `uGUI_InputGroup` system for event routing
+- Standard `GraphicRaycaster` + `ScreenSpaceOverlay` canvases **will not receive input** — `FPSInputModule` only routes to the active input group
+- To make custom UI interactive: **parent under the active game canvas** via `FPSInputModule.current.lastGroup.GetComponentInParent<Canvas>()`
+- `uGUI_GraphicRaycaster` registers in static `allRaycasters` list, but registration alone doesn't fix input — the **input group** is what matters
+- **Menu detection**: `Cursor.lockState == CursorLockMode.Locked` = universal "gameplay resumed" check (PDA, pause menu, Nautilus options all unlock cursor)
+- **Don't** use `PDA().isOpen` to detect menu state — fails for Nautilus options opened from pause menu
+- `GameInput.IsRunning` respects `RunMode` setting (toggle/hold/always-run) — for **pure hold** behavior use `GameInput.GetButtonHeld(GameInput.Button.Sprint)`
+- `GameInput.GetButtonDown/GetButtonHeld/GetButtonUp` — the standard input API (down=one frame, held=continuous, up=release frame)
+
 ## Anti-Patterns From Past Sessions
 
 - Using `StorageContainer` for upgrade module slots (should be `Equipment`)
@@ -62,6 +73,9 @@ Read this every session. One-liner gotchas and architecture essentials.
 - Forgetting `using Nautilus.Assets.Gadgets;` and getting "does not contain a definition" errors
 - Assuming field visibility hasn't changed between game versions
 - Using `nameof()` for inherited Unity lifecycle methods (won't compile — use string form)
+- Creating ScreenSpaceOverlay canvas with standard `GraphicRaycaster` — input won't work (use active game canvas parenting)
+- Setting `MeshRenderer.material.color` on seaglide — catches minimap screen display (use `SkinnedMeshRenderer` with `SeaGlide_geo` only)
+- Using `GameInput.IsRunning` for hold-to-boost — respects toggle setting, use `GetButtonHeld(Button.Sprint)` instead
 
 ## Breaking Changes Log
 
