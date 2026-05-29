@@ -43,8 +43,8 @@ dotnet build <ModName>/<ModName>.csproj -c Release   # CopyToPlugins target auto
 
 | Mod | Version | Game | Summary |
 |-|-|-|-|
-| PowerSaver | 1.0.0 | SN1 | Reduces power drain (prefix patches on `ConsumeEnergy`) |
-| PowerSaver.BZ | 1.0.0 | BZ | BZ port of PowerSaver |
+| PowerSaver | 1.0.1 | SN1 | Reduces power drain with true global stacking and Cyclops sonar vehicle classification |
+| PowerSaver.BZ | 1.0.3 | BZ | BZ port of PowerSaver with true global stacking, scoped EasyCraft compatibility, charger accounting compatibility, and Cyclops sonar vehicle classification |
 | CameraStalkerGuard | 1.0.0 | SN1 | Prevents stalkers targeting cameras (`CollectShiny.IsTargetValid`) |
 | CameraStalkerGuard.BZ | 1.0.0 | BZ | BZ port of CameraStalkerGuard |
 | BeaconColorPicker | 1.0.1 | SN1 | Custom beacon colors with RGB/hex display |
@@ -71,7 +71,7 @@ dotnet build <ModName>/<ModName>.csproj -c Release   # CopyToPlugins target auto
 | Using Nautilus API | `docs/tier2-nautilus-api.md` (~190 lines) |
 | Setting up a new mod | `docs/tier2-project-setup.md` (~175 lines) |
 | Debugging issues | `docs/tier2-debugging.md` (~95 lines) |
-| Specific API lookup | `docs/tier3-full-reference.md` — read section index, then `offset`/`limit` for relevant section only |
+| Specific API lookup | `docs/tier3-full-reference.md` - read section index, then `offset`/`limit` for relevant section only |
 
 ## Reverse Engineering
 

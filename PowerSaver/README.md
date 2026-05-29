@@ -4,13 +4,22 @@ A BepInEx 5 mod that reduces power/battery drain across the game with configurab
 
 ## What It Does
 
-Patches three core energy consumption methods via Harmony:
+Patches the core energy consumption paths via Harmony:
 
-- **`EnergyMixin.ConsumeEnergy`** — Covers all battery-powered tools and equipment (flashlight, seaglide, scanner, repair tool, etc.)
-- **`Vehicle.ConsumeEnergy`** — Covers Seamoth, Prawn Suit, and Cyclops engine drain
-- **`PowerRelay.ConsumeEnergy`** — Covers base/habitat power consumption (water filtration, fabricators, charge fins, etc.)
+- **`EnergyMixin.ConsumeEnergy`** - Covers battery-powered tools and equipment, including flashlight, seaglide, scanner, and repair tool.
+- **`Vehicle.ConsumeEnergy`** - Covers Seamoth, Prawn Suit, and vehicle upgrade module drain.
+- **`PowerRelay.ModifyPower`** - Covers habitat power consumption.
+- **`CyclopsSonarButton.SonarPing` context** - Treats Cyclops sonar power relay drain as vehicle drain instead of habitat drain.
 
-Each has an independent multiplier so you can fine-tune exactly what gets reduced.
+PowerSaver 1.0.1 uses a true global multiplier:
+
+| Drain path | Effective multiplier |
+|-|-|
+| Tools and battery equipment | `Global` |
+| Vehicles and Cyclops sonar | `Global x Vehicle` |
+| Habitat/base power | `Global x Base` |
+
+With the default settings, tools, vehicles, Cyclops sonar, and base power all drain at 75 percent of vanilla. The global multiplier defaults to `0.75`; vehicle and base category multipliers default to `1.0` so they only add extra adjustment when you choose to change them.
 
 ## Configuration
 
@@ -22,18 +31,18 @@ BepInEx\config\com.zerotheabsolute.powersaver.cfg
 ### Settings
 
 | Section | Key | Default | Description |
-|---------|-----|---------|-------------|
-| General | DrainMultiplier | 0.75 | Global multiplier for all battery drain. 0.75 = 25% reduction |
-| Vehicles | VehicleDrainMultiplier | 0.75 | Vehicle-specific multiplier. Stacks with global on vehicle batteries |
-| Base | BaseDrainMultiplier | 0.75 | Base power relay multiplier |
+|-|-|-|-|
+| General | DrainMultiplier | 0.75 | Baseline multiplier for supported power drain |
+| Vehicles | VehicleDrainMultiplier | 1.0 | Additional vehicle multiplier. Effective vehicle drain is Global x Vehicle |
+| Base | BaseDrainMultiplier | 1.0 | Additional base multiplier. Effective base drain is Global x Base |
 | Debug | EnableLogging | false | Log drain events to BepInEx console (very noisy) |
 
 ### Examples
-- `DrainMultiplier = 0.5` → Tools use half power
-- `VehicleDrainMultiplier = 0.25` → Vehicles use 75% less power
-- `BaseDrainMultiplier = 1.0` → Base drain unchanged (vanilla)
+- `DrainMultiplier = 0.5` means tools use half power.
+- `DrainMultiplier = 0.75` and `VehicleDrainMultiplier = 0.5` means vehicles use 37.5 percent power.
+- `DrainMultiplier = 0.75` and `BaseDrainMultiplier = 1.0` means base drain uses 75 percent power.
 
-**Note:** Vehicle and base multipliers are applied on top of the global multiplier if the drain goes through EnergyMixin first. Some vehicle systems call Vehicle.ConsumeEnergy directly, some go through EnergyMixin. If something feels too aggressive, set the category-specific one to 1.0 and just use Global.
+Existing generated 1.0 defaults of `0.75 / 0.75 / 0.75` migrate to `0.75 / 1.0 / 1.0` so effective default drain stays at 75 percent. Custom category values are left alone.
 
 ## Building
 
@@ -58,19 +67,19 @@ BepInEx\config\com.zerotheabsolute.powersaver.cfg
    The build auto-copies `PowerSaver.dll` to `BepInEx\plugins\PowerSaver\`.
    If auto-copy fails, manually copy:
    ```
-   bin\Release\net472\PowerSaver.dll → BepInEx\plugins\PowerSaver\PowerSaver.dll
+   bin\Release\net472\PowerSaver.dll -> BepInEx\plugins\PowerSaver\PowerSaver.dll
    ```
 
 4. **Launch Subnautica** and check `BepInEx\LogOutput.log` for:
    ```
-   [Info : PowerSaver] PowerSaver v1.0.0 loaded! Global drain: 0.75x | Vehicles: 0.75x | Base: 0.75x
+   [Info : PowerSaver] PowerSaver v1.0.1 loaded! Global drain: 0.75x | Effective vehicles: 0.75x | Effective base: 0.75x
    ```
 
 ## Troubleshooting
 
 - **Mod not loading:** Make sure SMLHelper is removed and you're running Nautilus. This mod doesn't depend on either, but SMLHelper conflicts can prevent the chainloader from finishing.
 - **No config file generated:** The config is only created on first successful load. Check LogOutput.log for errors.
-- **"Could not resolve type" errors:** Your game version may have changed the method signatures. Open `Assembly-CSharp.dll` in dnSpy/ILSpy and verify `EnergyMixin.ConsumeEnergy`, `Vehicle.ConsumeEnergy`, and `PowerRelay.ConsumeEnergy` still exist with the same signatures.
+- **"Could not resolve type" errors:** Your game version may have changed method names or signatures. Open `Assembly-CSharp.dll` in dnSpy/ILSpy and verify `EnergyMixin.ConsumeEnergy`, `Vehicle.ConsumeEnergy`, `PowerRelay.ModifyPower`, and `CyclopsSonarButton.SonarPing` still exist with the same signatures.
 
 ## Compatibility
 
@@ -80,7 +89,7 @@ BepInEx\config\com.zerotheabsolute.powersaver.cfg
 
 ## How to Extend
 
-Want to add per-device control? In dnSpy, look at what calls `EnergyMixin.ConsumeEnergy` — you can check the parent GameObject's TechType in the prefix to apply different multipliers per tool. For example:
+Want to add per-device control? In dnSpy, look at what calls `EnergyMixin.ConsumeEnergy`. You can check the parent GameObject's TechType in the prefix to apply different multipliers per tool. For example:
 
 ```csharp
 [HarmonyPrefix]

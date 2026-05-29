@@ -2,6 +2,7 @@ using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
 using Nautilus.Handlers;
+using System.IO;
 using UnityEngine;
 
 namespace PowerSaver.BZ
@@ -55,7 +56,7 @@ namespace PowerSaver.BZ
             double pct = saved / totalOriginal * 100.0;
 
             PowerSaverBZPlugin.Log.LogInfo(
-                $"[PowerSaver] {LogInterval}s summary — Total: {(float)totalOriginal:F2} → {(float)totalAdjusted:F2} " +
+                $"[PowerSaver] {LogInterval}s summary - Total: {(float)totalOriginal:F2} -> {(float)totalAdjusted:F2} " +
                 $"(saved {(float)saved:F2}, {pct:F0}%) | Tools: {(float)_toolsAdjusted:F2} | Vehicles: {(float)_vehicleAdjusted:F2} | Base: {(float)_baseAdjusted:F2}");
 
             _toolsOriginal = _toolsAdjusted = 0;
@@ -66,11 +67,12 @@ namespace PowerSaver.BZ
 
     [BepInPlugin(PLUGIN_GUID, PLUGIN_NAME, PLUGIN_VERSION)]
     [BepInDependency("com.snmodding.nautilus")]
+    [BepInDependency("snbz.easycraft.mod", BepInDependency.DependencyFlags.SoftDependency)]
     public class PowerSaverBZPlugin : BaseUnityPlugin
     {
         public const string PLUGIN_GUID = "com.zerotheabsolute.powersaver.bz";
         public const string PLUGIN_NAME = "PowerSaver BZ";
-        public const string PLUGIN_VERSION = "1.0.0";
+        public const string PLUGIN_VERSION = "1.0.3";
 
         internal static ManualLogSource Log;
         internal static PowerSaverConfig Options;
@@ -82,16 +84,61 @@ namespace PowerSaver.BZ
             Log = Logger;
 
             Options = OptionsPanelHandler.RegisterModOptions<PowerSaverConfig>();
+            MigrateConfigDefaults();
 
             _harmony = new Harmony(PLUGIN_GUID);
             _harmony.PatchAll();
 
-            Log.LogInfo($"{PLUGIN_NAME} v{PLUGIN_VERSION} loaded! Global drain: {Options.DrainMultiplier}x | Vehicles: {Options.VehicleDrainMultiplier}x | Base: {Options.BaseDrainMultiplier}x");
+            Log.LogInfo(
+                $"{PLUGIN_NAME} v{PLUGIN_VERSION} loaded! Global drain: {Options.DrainMultiplier}x | " +
+                $"Effective vehicles: {PowerDrainMath.GetVehicleMultiplier(Options.DrainMultiplier, Options.VehicleDrainMultiplier)}x | " +
+                $"Effective base: {PowerDrainMath.GetBaseMultiplier(Options.DrainMultiplier, Options.BaseDrainMultiplier)}x");
+        }
+
+        private void Start()
+        {
+            WarnAboutLegacyConfig();
+            ChargerCompatibility.Apply(_harmony);
+            EasyCraftCompatibility.TryApply(_harmony);
         }
 
         private void OnDestroy()
         {
             _harmony?.UnpatchSelf();
+        }
+
+        private static void WarnAboutLegacyConfig()
+        {
+            string legacyConfigPath = Path.Combine(Paths.ConfigPath, "com.zerotheabsolute.powersaver.bz.cfg");
+            string activeConfigPath = Path.Combine(Paths.ConfigPath, "PowerSaver.BZ", "config.json");
+            if (File.Exists(legacyConfigPath))
+            {
+                Log.LogWarning(
+                    $"Legacy PowerSaver BZ config found at {legacyConfigPath}. Active Nautilus settings are stored at {activeConfigPath}; the legacy file is not used.");
+            }
+        }
+
+        private static void MigrateConfigDefaults()
+        {
+            if (PowerSaverConfigMigration.ShouldMigrateOnePointOneDefaults(
+                Options.ConfigVersion,
+                Options.DrainMultiplier,
+                Options.VehicleDrainMultiplier,
+                Options.BaseDrainMultiplier))
+            {
+                Options.VehicleDrainMultiplier = 1.0f;
+                Options.BaseDrainMultiplier = 1.0f;
+                Options.ConfigVersion = PowerSaverConfigMigration.CurrentConfigVersion;
+                Options.Save();
+                Log.LogInfo("[PowerSaver BZ] Migrated 1.0.1 generated category defaults to 1.0 so effective default drain remains 75 percent.");
+                return;
+            }
+
+            if (Options.ConfigVersion != PowerSaverConfigMigration.CurrentConfigVersion)
+            {
+                Options.ConfigVersion = PowerSaverConfigMigration.CurrentConfigVersion;
+                Options.Save();
+            }
         }
     }
 
@@ -105,9 +152,8 @@ namespace PowerSaver.BZ
         [HarmonyPrefix]
         static void Prefix(ref float amount)
         {
-            float multiplier = PowerSaverBZPlugin.Options.DrainMultiplier;
             float original = amount;
-            amount *= multiplier;
+            amount = PowerDrainMath.AdjustToolDrain(amount, PowerSaverBZPlugin.Options.DrainMultiplier);
 
             if (PowerSaverBZPlugin.Options.EnableLogging)
                 PowerSaverDiagnostics.RecordEnergyMixin(original, amount);
@@ -149,9 +195,11 @@ namespace PowerSaver.BZ
         [HarmonyPrefix]
         static void Prefix(ref float amount)
         {
-            float multiplier = PowerSaverBZPlugin.Options.VehicleDrainMultiplier;
             float original = amount;
-            amount *= multiplier;
+            amount = PowerDrainMath.AdjustVehicleDrain(
+                amount,
+                PowerSaverBZPlugin.Options.DrainMultiplier,
+                PowerSaverBZPlugin.Options.VehicleDrainMultiplier);
 
             if (PowerSaverBZPlugin.Options.EnableLogging)
                 PowerSaverDiagnostics.RecordVehicle(original, amount);
@@ -161,7 +209,7 @@ namespace PowerSaver.BZ
     /// <summary>
     /// Base power relay patch: covers habitat power consumption from things
     /// like water filtration machines, fabricators, scanners, etc.
-    /// Uses ModifyPower(float, out float) — amount is negative for consumption.
+    /// Uses ModifyPower(float, out float) - amount is negative for consumption.
     /// </summary>
     [HarmonyPatch]
     internal static class PowerRelay_ModifyPower_Patch
@@ -184,14 +232,48 @@ namespace PowerSaver.BZ
         [HarmonyPrefix]
         static void Prefix(ref float amount)
         {
-            if (amount >= 0f) return;
-
-            float multiplier = PowerSaverBZPlugin.Options.BaseDrainMultiplier;
             float original = amount;
-            amount *= multiplier;
+            if (original >= 0f)
+            {
+                return;
+            }
+
+            if (CyclopsSonarDrainContext.IsActive)
+            {
+                amount = PowerDrainMath.AdjustVehicleDrain(
+                    amount,
+                    PowerSaverBZPlugin.Options.DrainMultiplier,
+                    PowerSaverBZPlugin.Options.VehicleDrainMultiplier);
+
+                if (PowerSaverBZPlugin.Options.EnableLogging)
+                    PowerSaverDiagnostics.RecordVehicle(original, amount);
+
+                return;
+            }
+
+            amount = PowerDrainMath.AdjustBasePowerDelta(
+                amount,
+                PowerSaverBZPlugin.Options.DrainMultiplier,
+                PowerSaverBZPlugin.Options.BaseDrainMultiplier);
 
             if (PowerSaverBZPlugin.Options.EnableLogging)
                 PowerSaverDiagnostics.RecordBase(original, amount);
+        }
+    }
+
+    [HarmonyPatch(typeof(CyclopsSonarButton), "SonarPing")]
+    internal static class CyclopsSonarButton_SonarPing_Patch
+    {
+        [HarmonyPrefix]
+        static void Prefix()
+        {
+            CyclopsSonarDrainContext.Enter();
+        }
+
+        [HarmonyFinalizer]
+        static void Finalizer()
+        {
+            CyclopsSonarDrainContext.Exit();
         }
     }
 }

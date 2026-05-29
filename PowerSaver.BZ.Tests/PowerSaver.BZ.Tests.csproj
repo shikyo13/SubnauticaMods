@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\PowerSaver.BZ\PowerDrainMath.cs" Link="PowerDrainMath.cs" />
+    <Compile Include="..\PowerSaver.BZ\PowerSaverConfigMigration.cs" Link="PowerSaverConfigMigration.cs" />
+    <Compile Include="..\PowerSaver.BZ\PowerSaverConfig.cs" Link="PowerSaverConfig.cs" />
+    <Compile Include="..\PowerSaver.BZ\CyclopsSonarDrainContext.cs" Link="CyclopsSonarDrainContext.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>D:\SteamLibrary\steamapps\common\SubnauticaZero\BepInEx\core\BepInEx.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nautilus">
+      <HintPath>D:\SteamLibrary\steamapps\common\SubnauticaZero\BepInEx\plugins\Nautilus\Nautilus.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
