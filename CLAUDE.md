@@ -2,6 +2,8 @@
 
 Monorepo of BepInEx 5 mods for Subnautica and Subnautica: Below Zero. Each subdirectory is a standalone mod with its own `.sln`/`.csproj`. BZ ports live in `<ModName>.BZ/` directories.
 
+Only owner-authored mods should be tracked in this repo. Keep PowerSaver, BeaconColorPicker, CameraStalkerGuard, their BZ ports, their tests, and `Shared/ColorPicker/`. EasyCraftFix.BZ and MapMod.BZ attempts may exist locally, but they are currently ignored unless real source is intentionally restored.
+
 ## Key Directories
 
 | Path | Purpose |
@@ -49,18 +51,6 @@ dotnet build <ModName>/<ModName>.csproj -c Release   # CopyToPlugins target auto
 | CameraStalkerGuard.BZ | 1.0.0 | BZ | BZ port of CameraStalkerGuard |
 | BeaconColorPicker | 1.0.1 | SN1 | Custom beacon colors with RGB/hex display |
 | BeaconColorPicker.BZ | 1.0.1 | BZ | BZ port of BeaconColorPicker |
-| AltMeter | 1.0.0 | SN1 | Shows altitude on depth compass when above water |
-| AltMeter.BZ | 1.0.0 | BZ | BZ port with configurable text colors (Nautilus) |
-| MapRoomCameraLights | 1.0.0 | SN1 | Configurable scanner room camera lights (Nautilus) |
-| MapRoomCameraLights.BZ | 1.0.0 | BZ | BZ port of MapRoomCameraLights (Nautilus) |
-| BetterFlashLight | 1.0.0 | SN1 | Custom flashlight color/brightness/range (Nautilus) |
-| BetterFlashLight.BZ | 1.0.0 | BZ | BZ port, patches `ToggleLights.Update` (Nautilus) |
-| DockLightsToggle | 1.0.0 | BZ | Turns off vehicle lights when docked (Nautilus) |
-| JukeboxMod | 1.0.0 | BZ | Custom jukebox colors + party mode lighting |
-| BetterSeaglide | 1.0.0 | SN1 | Speed boost + custom light/body/energy bar colors (Nautilus) |
-| BetterSeaglide.BZ | 1.0.0 | BZ | BZ port of BetterSeaglide (Nautilus) |
-| WaterFoodHotkey | 1.0.0 | SN1 | Auto-eat/drink hotkeys via GameInput (Nautilus) |
-| WaterFoodHotkey.BZ | 1.0.0 | BZ | BZ port with food/drink/health/heat hotkeys (Nautilus) |
 
 ## Documentation
 

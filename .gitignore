@@ -6,3 +6,17 @@ obj/
 *.dll
 !lib/*.dll
 .claude/
+
+# Local copies of mods that are not owned by this repo owner.
+/AltMeter/
+/AltMeter.BZ/
+/BetterFlashLight/
+/BetterFlashLight.BZ/
+/BetterSeaglide/
+/BetterSeaglide.BZ/
+/DockLightsToggle/
+/JukeboxMod/
+/MapRoomCameraLights/
+/MapRoomCameraLights.BZ/
+/WaterFoodHotkey/
+/WaterFoodHotkey.BZ/
