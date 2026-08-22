@@ -14,6 +14,12 @@ Replaces the limited 5-color preset palette with a full-spectrum HSV color picke
 - Custom colors persist across game sessions (saved to JSON)
 - Selecting a preset color dot clears any custom color for that ping
 - Custom colors display correctly on the HUD
+- Works with a gamepad: the "+" button and the picker's own sliders/hex
+  field/buttons are all reachable and usable with d-pad + a controller,
+  and the picker no longer flashes shut immediately when opened with one
+- Works in VR: the picker no longer closes itself within a frame of
+  opening, and its hex field opens a VR virtual keyboard when a
+  compatible VR mod (e.g. SubmersedVR) is installed
 
 ## Building
 

@@ -83,6 +83,16 @@ namespace BeaconColorPicker
     /// Clones an existing color dot toggle, repositions it, and wires it to open
     /// the ColorPickerPanel. Also applies custom colors to the entry icon and
     /// selection indicator on initialization.
+    ///
+    /// The clone keeps its Toggle component (rather than being replaced with a
+    /// Button) and is appended onto uGUI_PingEntry.colorSelectors, because that's
+    /// the array uGUI_PingEntry.GetSelectables() builds its d-pad/controller
+    /// navigation list directly and only from. A control that isn't a member of
+    /// it is invisible to controller navigation even though it's visible and
+    /// mouse-clickable -- confirmed by adding logging that showed an earlier,
+    /// external GetSelectables postfix approach never actually got called in a
+    /// live session, while this approach is picked up automatically by the
+    /// game's own unmodified method.
     /// </summary>
     [HarmonyPatch(typeof(uGUI_PingEntry), "Initialize")]
     internal static class uGUI_PingEntry_Initialize_Patch
@@ -108,53 +118,93 @@ namespace BeaconColorPicker
                     return;
                 }
 
+                // colorSelectors may already include our own toggle from an
+                // earlier Initialize() call on this same pooled entry (reused
+                // for a different ping over the session) -- exclude it by name
+                // so "the last preset" below is always a real preset, never
+                // our own clone positioning itself relative to itself.
+                Toggle[] presets = System.Array.FindAll(toggles, t => t != null && t.gameObject.name != "CustomColorButton");
+                if (presets.Length == 0)
+                {
+                    BeaconColorPickerPlugin.Log.LogWarning($"  no preset color toggles found, skipping.");
+                    return;
+                }
+
                 // Prevent duplicate buttons on re-initialization
                 Transform existing = __instance.transform.Find("CustomColorButton");
+                Toggle customToggle;
                 if (existing != null)
                 {
+                    customToggle = existing.GetComponent<Toggle>();
+                    if (customToggle == null)
+                    {
+                        BeaconColorPickerPlugin.Log.LogWarning($"  CustomColorButton exists but has no Toggle component, skipping.");
+                        return;
+                    }
+
                     // Update the button color if a custom color exists
                     UpdateButtonColor(existing.gameObject, id);
                     // Apply custom color to icon and indicator on re-init
                     if (CustomColorStore.TryGetColor(id, out Color c))
                         ApplyCustomColorToEntry(__instance, c, existing.gameObject);
 
-                    // Re-wire button listener with current ping ID and entry (fixes stale closure)
-                    var button = existing.GetComponent<Button>();
-                    if (button != null)
-                        RewireButtonListener(button, id, __instance, existing.gameObject);
+                    // Re-wire with the current ping ID/entry every re-init: this
+                    // pooled entry gets reused for different pings over a
+                    // session, and the closure captured when the toggle was
+                    // first created would otherwise keep referencing whichever
+                    // ping was here first (a real bug, not hypothetical --
+                    // clicks would silently open the picker for the wrong
+                    // beacon). A fresh event object also guarantees nothing
+                    // stale survives the re-wire.
+                    customToggle.onValueChanged = new Toggle.ToggleEvent();
+                    WireToggleListener(customToggle, id, __instance, existing.gameObject);
+                }
+                else
+                {
+                    // Clone the last color toggle as our "+" button
+                    Toggle lastToggle = presets[presets.Length - 1];
+                    var newToggleGo = Object.Instantiate(lastToggle.gameObject, lastToggle.transform.parent);
+                    newToggleGo.name = "CustomColorButton";
+                    customToggle = newToggleGo.GetComponent<Toggle>();
 
-                    return;
+                    // Position after the last toggle
+                    var rt = newToggleGo.GetComponent<RectTransform>();
+                    var lastRt = lastToggle.GetComponent<RectTransform>();
+                    rt.anchoredPosition = lastRt.anchoredPosition + new Vector2(rt.sizeDelta.x + 4f, 0f);
+
+                    // The clone inherited the last preset's own baked-in
+                    // onValueChanged listener (e.g. a SetColorN callback) and
+                    // possibly its ToggleGroup membership. Assigning a
+                    // brand-new ToggleEvent -- rather than RemoveAllListeners(),
+                    // which doesn't reliably clear persistent/prefab-serialized
+                    // listeners -- guarantees no old callback survives to
+                    // silently overwrite the ping's real stored color when this
+                    // button is clicked. Kept as a real Toggle (rather than
+                    // replaced with a Button, as before) specifically so it's a
+                    // genuine colorSelectors[] member; see the class doc above.
+                    customToggle.onValueChanged = new Toggle.ToggleEvent();
+                    customToggle.group = null;
+
+                    // Set appearance — white by default, custom color if one exists
+                    UpdateButtonColor(newToggleGo, id);
+
+                    // Apply custom color to icon and indicator if one exists
+                    if (CustomColorStore.TryGetColor(id, out Color customColor))
+                        ApplyCustomColorToEntry(__instance, customColor, newToggleGo);
+
+                    // Wire click to open color picker
+                    WireToggleListener(customToggle, id, __instance, newToggleGo);
                 }
 
-                // Clone the last color toggle as our "+" button
-                Toggle lastToggle = toggles[toggles.Length - 1];
-                var newToggleGo = Object.Instantiate(lastToggle.gameObject, lastToggle.transform.parent);
-                newToggleGo.name = "CustomColorButton";
-
-                // Position after the last toggle
-                var rt = newToggleGo.GetComponent<RectTransform>();
-                var lastRt = lastToggle.GetComponent<RectTransform>();
-                rt.anchoredPosition = lastRt.anchoredPosition + new Vector2(rt.sizeDelta.x + 4f, 0f);
-
-                // Destroy the cloned Toggle — it carries persistent SetColorN callbacks from the prefab
-                // that RemoveAllListeners() can't remove, causing unwanted color resets
-                var oldToggle = newToggleGo.GetComponent<Toggle>();
-                if (oldToggle != null)
-                    Object.DestroyImmediate(oldToggle);
-
-                // Add a clean Button — no persistent callbacks
-                var newButton = newToggleGo.AddComponent<Button>();
-                newButton.targetGraphic = newToggleGo.GetComponent<Image>();
-
-                // Set appearance — white by default, custom color if one exists
-                UpdateButtonColor(newToggleGo, id);
-
-                // Apply custom color to icon and indicator if one exists
-                if (CustomColorStore.TryGetColor(id, out Color customColor))
-                    ApplyCustomColorToEntry(__instance, customColor, newToggleGo);
-
-                // Wire click to open color picker
-                RewireButtonListener(newButton, id, __instance, newToggleGo);
+                // Idempotent: only append if colorSelectors doesn't already end
+                // with our toggle.
+                if (toggles.Length == 0 || toggles[toggles.Length - 1] != customToggle)
+                {
+                    var extended = new Toggle[presets.Length + 1];
+                    presets.CopyTo(extended, 0);
+                    extended[presets.Length] = customToggle;
+                    __instance.colorSelectors = extended;
+                }
             }
             finally
             {
@@ -163,15 +213,22 @@ namespace BeaconColorPicker
         }
 
         /// <summary>
-        /// Wires (or re-wires) a Button's onClick to open the color picker
-        /// for the given ping ID and entry. Used both for new buttons and re-init
-        /// of pooled entries to prevent stale closures.
+        /// Wires (or re-wires) a Toggle's onValueChanged to open the color
+        /// picker for the given ping ID and entry. Used both for new toggles
+        /// and re-init of pooled entries to prevent stale closures.
         /// </summary>
-        private static void RewireButtonListener(Button button, string pingId, uGUI_PingEntry entry, GameObject buttonGo)
+        private static void WireToggleListener(Toggle toggle, string pingId, uGUI_PingEntry entry, GameObject buttonGo)
         {
-            button.onClick.RemoveAllListeners();
-            button.onClick.AddListener(() =>
+            toggle.onValueChanged.AddListener(isOn =>
             {
+                if (!isOn) return;
+
+                // Momentary-button feel: this toggle doesn't represent a
+                // lasting "selected preset" state (the shared
+                // colorSelectionIndicator ring already handles showing which
+                // color is active), it just needs to register a click.
+                toggle.SetIsOnWithoutNotify(false);
+
                 // Get current color for the picker to start from
                 Color currentColor;
                 if (!CustomColorStore.TryGetColor(pingId, out currentColor))
@@ -216,7 +273,10 @@ namespace BeaconColorPicker
             // Move the selection indicator circle to the custom color button
             if (entry.colorSelectionIndicator != null && customButton != null)
             {
-                var btnRt = customButton.GetComponent<RectTransform>();
+                var toggle = customButton.GetComponent<Toggle>();
+                var btnRt = toggle != null && toggle.targetGraphic != null
+                    ? toggle.targetGraphic.rectTransform
+                    : customButton.GetComponent<RectTransform>();
                 if (btnRt != null)
                     entry.colorSelectionIndicator.position = btnRt.position;
             }
@@ -235,6 +295,29 @@ namespace BeaconColorPicker
             {
                 img.color = displayColor;
             }
+        }
+    }
+
+    /// <summary>
+    /// Closes the color picker panel when the PDA itself closes.
+    /// uGUI_PDA.OnSelect/OnDeselect unconditionally reset
+    /// GamepadInputModule's current navigable grid on every PDA focus change
+    /// -- once when it's opened (back to whatever tab is current) and once
+    /// when it's closed (to null) -- with no awareness this panel might be
+    /// open as an overlay on top of it. Left alone, closing and reopening
+    /// the PDA left the panel visibly open but with no controller focus on
+    /// any of its controls at all. Closing it along with the PDA is simpler
+    /// and more predictable than trying to reconcile grid ownership across
+    /// that transition -- the same way any other modal dialog would behave.
+    /// </summary>
+    [HarmonyPatch(typeof(uGUI_PDA), "OnDeselect")]
+    internal static class uGUI_PDA_OnDeselect_Patch
+    {
+        [HarmonyPostfix]
+        static void Postfix()
+        {
+            if (ColorPickerPanel.Instance.IsVisible)
+                ColorPickerPanel.Instance.Hide();
         }
     }
 }
