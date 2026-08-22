@@ -1,10 +1,14 @@
 using System;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.XR;
 namespace SubnauticaMods.Shared
 {
     public class ColorPickerPanel : MonoBehaviour
     {
+        private static readonly Color FocusRingColor = new Color(0.3f, 0.85f, 1f, 1f);
+
         private static ColorPickerPanel _instance;
 
         private GameObject _panelRoot;
@@ -14,10 +18,17 @@ namespace SubnauticaMods.Shared
         private Image _previewSwatch;
         private Image _hueBackground;
         private Text _rgbLabel;
-        private InputField _hexInput;
+        private TMP_InputField _hexInput;
+        private Button _applyButton;
+        private Button _closeButton;
 
         private string _contextId;
         private Action<string, Color> _onApply;
+
+        private NavigableGrid _navigableGrid;
+        private uGUI_INavigableIconGrid _previousGrid;
+        private GameObject _focusRing;
+        private RectTransform _focusRingRect;
 
         /// <summary>
         /// Optional logger for warnings. Set by consuming mods.
@@ -62,6 +73,20 @@ namespace SubnauticaMods.Shared
             UpdatePreview();
 
             _panelRoot.SetActive(true);
+
+            // This panel's controls (sliders, hex field, buttons) aren't part
+            // of any uGUI_INavigableIconGrid on their own -- this game's
+            // controller navigation is driven entirely by whichever grid
+            // GamepadInputModule currently holds. Seize it while the panel is
+            // open and hand it back on close.
+            if (GamepadInputModule.current != null)
+            {
+                if (_navigableGrid == null)
+                    _navigableGrid = new NavigableGrid(this);
+                _previousGrid = GamepadInputModule.current.GetCurrentGrid();
+                _navigableGrid.SelectFirstItem();
+                GamepadInputModule.current.SetCurrentGrid(_navigableGrid);
+            }
         }
 
         private static Canvas FindActiveCanvas()
@@ -78,12 +103,42 @@ namespace SubnauticaMods.Shared
         {
             if (_panelRoot != null)
                 _panelRoot.SetActive(false);
+
+            HideFocusRing();
+
+            if (GamepadInputModule.current != null && GamepadInputModule.current.GetCurrentGrid() == (object)_navigableGrid)
+            {
+                GamepadInputModule.current.SetCurrentGrid(_previousGrid);
+                _previousGrid = null;
+            }
         }
 
         private void Update()
         {
-            if (IsVisible && Cursor.lockState == CursorLockMode.Locked)
+            // Cursor.lockState == Locked is a mouse-specific proxy for "the
+            // player clicked back into the game world, close this menu." It's
+            // already true from ordinary gameplay in VR (the cursor is
+            // effectively always locked there) and for controller input
+            // (there's no mouse-look capture/release cycle for a controller
+            // press to trigger), so relying on it alone closed this panel
+            // within a frame of it ever opening for either.
+            bool mouseDriven = XRSettings.loadedDeviceName != "OpenVR" && GameInput.PrimaryDevice != GameInput.Device.Controller;
+            if (mouseDriven && IsVisible && Cursor.lockState == CursorLockMode.Locked)
+            {
                 Hide();
+                return;
+            }
+
+            // uGUI_PDA.OnSelect resets GamepadInputModule's current grid back
+            // to whatever PDA tab is open on every PDA focus change --
+            // including simply reopening the PDA while this panel is still
+            // up -- with no awareness this panel might be open on top of it.
+            // Re-assert ownership every frame instead of trying to patch
+            // every place that might reset it.
+            if (IsVisible && _navigableGrid != null && GamepadInputModule.current != null && GamepadInputModule.current.GetCurrentGrid() != (object)_navigableGrid)
+            {
+                GamepadInputModule.current.SetCurrentGrid(_navigableGrid);
+            }
         }
 
         private Color CurrentColor =>
@@ -172,14 +227,19 @@ namespace SubnauticaMods.Shared
             hexTextRt.anchorMax = Vector2.one;
             hexTextRt.offsetMin = new Vector2(5f, 2f);
             hexTextRt.offsetMax = new Vector2(-5f, -2f);
-            var hexText = hexTextGo.AddComponent<Text>();
-            hexText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            var hexText = hexTextGo.AddComponent<TextMeshProUGUI>();
             hexText.fontSize = 14;
             hexText.color = Color.white;
-            hexText.alignment = TextAnchor.MiddleCenter;
-            hexText.supportRichText = false;
+            hexText.alignment = TextAlignmentOptions.Center;
 
-            _hexInput = hexGo.AddComponent<InputField>();
+            // TMP_InputField rather than the legacy InputField: SubmersedVR
+            // (and likely other VR mods) hook their virtual-keyboard-in-VR
+            // support as a Harmony postfix on
+            // TMPro.TMP_InputField.ActivateInputField specifically, so a
+            // legacy InputField's ActivateInputField never triggers it --
+            // the field still accepted clicks and a physical keyboard, so it
+            // looked like it worked, it just never opened a VR keyboard.
+            _hexInput = hexGo.AddComponent<TMP_InputField>();
             _hexInput.textComponent = hexText;
             _hexInput.characterLimit = 7;
             _hexInput.onEndEdit.AddListener(hexStr =>
@@ -195,10 +255,77 @@ namespace SubnauticaMods.Shared
                 }
             });
 
-            CreateButton(_panelRoot.transform, "Apply", new Vector2(-60, -170), new Color(0.2f, 0.6f, 0.2f, 1f), OnApplyClicked);
-            CreateButton(_panelRoot.transform, "Close", new Vector2(60, -170), new Color(0.5f, 0.2f, 0.2f, 1f), Hide);
+            _applyButton = CreateButton(_panelRoot.transform, "Apply", new Vector2(-60, -170), new Color(0.2f, 0.6f, 0.2f, 1f), OnApplyClicked);
+            _closeButton = CreateButton(_panelRoot.transform, "Close", new Vector2(60, -170), new Color(0.5f, 0.2f, 0.2f, 1f), Hide);
+
+            CreateFocusRing();
 
             _panelRoot.SetActive(false);
+        }
+
+        // Unity's own Selectable ColorTint transition turned out unreliable
+        // as a focus indicator here: targetGraphic is assigned after
+        // AddComponent<Button>()/<Slider>() in CreateButton/CreateSlider, so
+        // the very first automatic state transition (which fires immediately
+        // on enable) runs against a null targetGraphic and never visibly
+        // recovers even once targetGraphic is set. Rather than fight that
+        // transition timing, the panel drives its own explicit focus
+        // indicator directly from NavigableGrid's selection state -- a
+        // 4-bar hollow rectangle, built the same procedural-primitives way
+        // as the rest of this panel (no sprite assets needed).
+        private void CreateFocusRing()
+        {
+            var ring = new GameObject("FocusRing");
+            ring.transform.SetParent(_panelRoot.transform, false);
+            _focusRingRect = ring.AddComponent<RectTransform>();
+            const float thickness = 3f;
+            CreateFocusRingBar(ring.transform, "Top", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, thickness));
+            CreateFocusRingBar(ring.transform, "Bottom", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, thickness));
+            CreateFocusRingBar(ring.transform, "Left", new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(thickness, 0f));
+            CreateFocusRingBar(ring.transform, "Right", new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(thickness, 0f));
+            _focusRing = ring;
+            _focusRing.SetActive(false);
+        }
+
+        private void CreateFocusRingBar(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 sizeDelta)
+        {
+            var bar = new GameObject(name);
+            bar.transform.SetParent(parent, false);
+            var rect = bar.AddComponent<RectTransform>();
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.pivot = pivot;
+            rect.sizeDelta = sizeDelta;
+            rect.anchoredPosition = Vector2.zero;
+            var image = bar.AddComponent<Image>();
+            image.color = FocusRingColor;
+            image.raycastTarget = false;
+        }
+
+        /// <summary>
+        /// Called by NavigableGrid whenever its selection changes. `item` is
+        /// whatever GetSelectedItem() returns -- always a Component sharing
+        /// this panel's own center-anchored RectTransform convention, so no
+        /// space conversion is needed to size the ring around it.
+        /// </summary>
+        internal void ShowFocusRing(object item)
+        {
+            var target = (item as Component)?.GetComponent<RectTransform>();
+            if (target == null || _focusRing == null)
+            {
+                HideFocusRing();
+                return;
+            }
+            _focusRingRect.anchoredPosition = target.anchoredPosition;
+            _focusRingRect.sizeDelta = target.sizeDelta + new Vector2(10f, 10f);
+            _focusRing.transform.SetAsLastSibling();
+            _focusRing.SetActive(true);
+        }
+
+        internal void HideFocusRing()
+        {
+            if (_focusRing != null)
+                _focusRing.SetActive(false);
         }
 
         private Image CreateHueGradient(Slider slider)
@@ -298,7 +425,7 @@ namespace SubnauticaMods.Shared
             return slider;
         }
 
-        private void CreateButton(Transform parent, string label, Vector2 position, Color bgColor, UnityEngine.Events.UnityAction onClick)
+        private Button CreateButton(Transform parent, string label, Vector2 position, Color bgColor, UnityEngine.Events.UnityAction onClick)
         {
             var go = new GameObject($"Button_{label}");
             go.transform.SetParent(parent, false);
@@ -325,6 +452,105 @@ namespace SubnauticaMods.Shared
             txt.color = Color.white;
             txt.alignment = TextAnchor.MiddleCenter;
             txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+            return btn;
+        }
+
+        /// <summary>
+        /// Minimal uGUI_INavigableIconGrid over this panel's own controls
+        /// (hue/sat/val sliders and the hex field each their own row,
+        /// Apply+Close sharing a row navigable left/right).
+        /// GamepadInputModule already dispatches value changes based on
+        /// GetSelectedItem()'s runtime type -- the right stick onto a
+        /// Slider directly, and UISubmit onto anything implementing
+        /// IPointerClickHandler (Button and TMP_InputField both do) -- so
+        /// this class only needs to move focus between controls, not
+        /// manipulate their values.
+        /// </summary>
+        private class NavigableGrid : uGUI_INavigableIconGrid
+        {
+            private readonly ColorPickerPanel _panel;
+            private int _row;
+            private int _col;
+
+            internal NavigableGrid(ColorPickerPanel panel)
+            {
+                _panel = panel;
+            }
+
+            public bool ShowSelector => true;
+            public bool EmulateRaycast => true;
+
+            private object[][] Rows => new object[][]
+            {
+                new object[] { _panel._hueSlider },
+                new object[] { _panel._satSlider },
+                new object[] { _panel._valSlider },
+                new object[] { _panel._hexInput },
+                new object[] { _panel._applyButton, _panel._closeButton },
+            };
+
+            public object GetSelectedItem()
+            {
+                var rows = Rows;
+                _row = Mathf.Clamp(_row, 0, rows.Length - 1);
+                _col = Mathf.Clamp(_col, 0, rows[_row].Length - 1);
+                return rows[_row][_col];
+            }
+
+            public Graphic GetSelectedIcon() => (GetSelectedItem() as Selectable)?.targetGraphic;
+
+            public void SelectItem(object item)
+            {
+                var rows = Rows;
+                for (int r = 0; r < rows.Length; r++)
+                {
+                    for (int c = 0; c < rows[r].Length; c++)
+                    {
+                        if (Equals(rows[r][c], item))
+                        {
+                            _row = r;
+                            _col = c;
+                            RefreshFocusRing();
+                            return;
+                        }
+                    }
+                }
+            }
+
+            public void DeselectItem() => _panel.HideFocusRing();
+
+            public bool SelectFirstItem()
+            {
+                _row = 0;
+                _col = 0;
+                RefreshFocusRing();
+                return true;
+            }
+
+            public bool SelectItemClosestToPosition(Vector3 worldPos) => SelectFirstItem();
+
+            public bool SelectItemInDirection(int dirX, int dirY)
+            {
+                if (dirX == 0 && dirY == 0)
+                    return false;
+
+                var rows = Rows;
+                int newRow = Mathf.Clamp(_row + dirY, 0, rows.Length - 1);
+                int newCol = dirY != 0 ? 0 : Mathf.Clamp(_col + dirX, 0, rows[_row].Length - 1);
+                newCol = Mathf.Clamp(newCol, 0, rows[newRow].Length - 1);
+                if (newRow == _row && newCol == _col)
+                    return false;
+
+                _row = newRow;
+                _col = newCol;
+                RefreshFocusRing();
+                return true;
+            }
+
+            public uGUI_INavigableIconGrid GetNavigableGridInDirection(int dirX, int dirY) => null;
+
+            private void RefreshFocusRing() => _panel.ShowFocusRing(GetSelectedItem());
         }
     }
 }

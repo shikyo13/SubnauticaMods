@@ -71,6 +71,17 @@
       <HintPath>$(ManagedDir)\UnityEngine.IMGUIModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- Needed by Shared/ColorPicker/ColorPickerPanel.cs: TMP_InputField for
+         the VR-keyboard hex field fix, VRModule for the VR/controller flash
+         fix. -->
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>$(ManagedDir)\Unity.TextMeshPro.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.VRModule">
+      <HintPath>$(ManagedDir)\UnityEngine.VRModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <!-- Shared source (compiled into this assembly) -->

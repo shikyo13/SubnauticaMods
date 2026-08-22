@@ -71,6 +71,19 @@
       <HintPath>$(ManagedDir)\UnityEngine.IMGUIModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- Needed by Shared/ColorPicker/ColorPickerPanel.cs as of the VR/
+         controller fixes -- added for symmetry with BeaconColorPicker's
+         csproj since this project links the same file. Not verified against
+         a real Below Zero install; please double check this project still
+         builds. -->
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>$(ManagedDir)\Unity.TextMeshPro.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.VRModule">
+      <HintPath>$(ManagedDir)\UnityEngine.VRModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <!-- Shared source (compiled into this assembly) -->
